@@ -41,17 +41,17 @@ class User(BaseModel):
 class Blog(BaseModel):
     __tablename__ = 'blogs'
     
-    id = Column(UUID(as_uuid=True),default=uuid.uuid4,primary_key=True)
-    title = Column(String(30),nullable=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(100), nullable=False)
     description = Column(Text, nullable=False)
-    image_url = Column(String(255), nullable=True)
+    image_url = Column(String(500), nullable=True)
     like_count = Column(Integer, default=0)
-    like_user = Column(ARRAY(String), default=[])
+    like_user = Column(ARRAY(String), default=list)
     comment_count = Column(Integer, default=0)
-    user_id  = Column(UUID(as_uuid=True),ForeignKey('users.id'),nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     
-    user = relationship("User",back_populates="blogs")
-    comments = relationship("Comment",back_populates="blog")
+    user = relationship("User", back_populates="blogs")
+    comments = relationship("Comment", back_populates="blog", cascade="all, delete-orphan")
     
     
     

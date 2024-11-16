@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from api.db import get_db
 from api.models import Blog, User, UserRole
@@ -14,19 +14,34 @@ router = APIRouter(
 )
 
 async def check_blog_permission(blog_id: UUID, user_data: dict, db: Session):
-    blog = db.query(Blog).filter(Blog.id == blog_id).first()
-    if not blog:
+    """Check if user has permission to modify the blog"""
+    try:
+        blog = db.query(Blog).filter(Blog.id == blog_id).first()
+        if not blog:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Blog not found"
+            )
+        print("tokne--->",user_data.get("sub"),"     ",str(blog.user_id))
+        # Check if user is admin or blog owner
+        is_admin = user_data.get("role") == "admin"
+        is_owner = str(blog.user_id) == user_data.get("sub")
+        
+        if not (is_admin or is_owner):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to modify this blog. Only the blog owner or admin can modify it."
+            )
+        
+        return blog
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Blog not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error checking blog permissions: {str(e)}"
         )
-    
-    if user_data["role"] != "admin" and str(blog.user_id) != user_data["sub"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to modify this blog"
-        )
-    return blog
 
 @router.post("/", response_model=BlogResponse)
 async def create_blog(
@@ -90,32 +105,66 @@ async def get_blog(
 @router.put("/{blog_id}", response_model=BlogResponse)
 async def update_blog(
     blog_id: UUID,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
-    image: Optional[UploadFile] = File(None),
+    title: str = Form(None, description="Updated blog title"),
+    description: str = Form(None, description="Updated blog description"),
+    image: UploadFile = File(None, description="Updated blog image"),
     db: Session = Depends(get_db),
     token_data: dict = Depends(verify_token)
 ):
-    blog = await check_blog_permission(blog_id, token_data, db)
-    
+    """
+    Update a blog post. Only the blog owner or admin can update it.
+    """
     try:
+        # First check permission
+        blog = await check_blog_permission(blog_id, token_data, db)
+        
+        # Track if any changes were made
+        changes_made = False
+        
+        # Validate and update fields
+        if title is not None and title.strip():
+            if len(title) > 100:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Title must be 100 characters or less"
+                )
+            blog.title = title.strip()
+            changes_made = True
+            
+        if description is not None and description.strip():
+            blog.description = description.strip()
+            changes_made = True
+            
         # Handle image upload if provided
-        if image:
+        if image and image.filename:
+            # Validate image
+            if not image.content_type.startswith('image/'):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="File must be an image"
+                )
+                
             # Delete old image if exists
             if blog.image_url:
                 await delete_image(blog.image_url)
+                
             # Upload new image
             blog.image_url = await upload_image(image)
-        
-        if title is not None:
-            blog.title = title
-        if description is not None:
-            blog.description = description
+            changes_made = True
+            
+        if not changes_made:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No changes provided for update"
+            )
             
         db.commit()
         db.refresh(blog)
         return blog
         
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -145,4 +194,91 @@ async def delete_blog(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting blog: {str(e)}"
+        )
+
+@router.patch("/{blog_id}/like", response_model=BlogResponse)
+async def toggle_like_blog(
+    blog_id: UUID,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(verify_token)
+):
+    """
+    Toggle like/unlike for a blog post.
+    - If user hasn't liked the blog: adds like and user to like_user list
+    - If user has already liked: removes like and user from like_user list
+    """
+    try:
+        # Get the blog
+        blog = db.query(Blog).filter(Blog.id == blog_id).first()
+        if not blog:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Blog not found"
+            )
+        
+        # Get current user's ID
+        current_user_id = str(token_data["sub"])
+        
+        # Initialize like_user list if None
+        if blog.like_user is None:
+            blog.like_user = []
+        
+        # Check if user has already liked
+        if current_user_id in blog.like_user:
+            # Unlike: Remove user and decrease count
+            blog.like_user.remove(current_user_id)
+            blog.like_count = max(0, blog.like_count - 1)  # Ensure count doesn't go below 0
+        else:
+            # Like: Add user and increase count
+            blog.like_user.append(current_user_id)
+            blog.like_count = blog.like_count + 1
+        
+        db.commit()
+        db.refresh(blog)
+        return blog
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error toggling blog like: {str(e)}"
+        )
+
+# Add this route to get like status for current user
+@router.get("/{blog_id}/like-status", response_model=dict)
+async def get_blog_like_status(
+    blog_id: UUID,
+    db: Session = Depends(get_db),
+    token_data: dict = Depends(verify_token)
+):
+    """
+    Get the like status of the blog for the current user
+    Returns:
+    - liked: boolean indicating if current user has liked the blog
+    - like_count: total number of likes
+    """
+    try:
+        blog = db.query(Blog).filter(Blog.id == blog_id).first()
+        if not blog:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Blog not found"
+            )
+        
+        current_user_id = str(token_data["sub"])
+        is_liked = current_user_id in (blog.like_user or [])
+        
+        return {
+            "liked": is_liked,
+            "like_count": blog.like_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting blog like status: {str(e)}"
         ) 
