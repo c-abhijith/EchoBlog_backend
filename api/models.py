@@ -37,6 +37,7 @@ class User(BaseModel):
     blogs = relationship("Blog",back_populates="user",cascade="all,delete-orphan")
     comments = relationship("Comment",back_populates="user")
 
+
 class Blog(BaseModel):
     __tablename__ = 'blogs'
     
@@ -51,6 +52,8 @@ class Blog(BaseModel):
     
     user = relationship("User",back_populates="blogs")
     comments = relationship("Comment",back_populates="blog")
+    
+    
     
 class Comment(BaseModel):
     __tablename__='comments'
