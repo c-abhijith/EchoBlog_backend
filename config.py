@@ -14,8 +14,12 @@ class Settings:
     SERVER_PORT: int = int(os.getenv('SERVER_PORT', '8000'))
     SERVER_WORKERS: int = int(os.getenv("WORKERS", "1"))
     
-    DATABASE_URL = os.getenv("DATABASE_URL","sqlite:///./blogz4.db")
+    DATABASE_URL = os.getenv("DATABASE_URL","")
     ALLOWED_ORIGINS= os.getenv("ALLOWED_ORIGINS","http://localhost:3000")
+    
+    SECRET_KEY:str = os.getenv("SECRET_KEY","secret_key")
+    ALGORITHM :str= os.getenv("ALGORITHM","HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES:int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     
 
 @lru_cache

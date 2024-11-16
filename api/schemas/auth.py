@@ -25,7 +25,12 @@ class SignUpResponse(BaseModel):
     message: str
     user: UserResponse
 
-class UserListResponse(BaseModel):
-    total: int
-    users: List[UserResponse]
+class Token(BaseModel):
+    access_token:str
+    refresh_token:str
+    token_type:str
+    
+class Login(BaseModel):
+    email:str
+    password:str
     

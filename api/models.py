@@ -29,9 +29,9 @@ class User(BaseModel):
     password = Column(String(255),nullable=False)
     bio = Column(Text,nullable=True)
     title = Column(String(30),nullable=True)
-    twitter_url = Column(String,nullable=True)
-    instagram_url = Column(String,nullable=True)
-    linkedin_url = Column(String,nullable=True)
+    twitter_url = Column(String(200),nullable=True)
+    instagram_url = Column(String(200),nullable=True)
+    linkedin_url = Column(String(200),nullable=True)
     role = Column(Enum(UserRole),default=UserRole.USER,nullable=False)
     
     blogs = relationship("Blog",back_populates="user",cascade="all,delete-orphan")
@@ -42,7 +42,7 @@ class Blog(BaseModel):
     __tablename__ = 'blogs'
     
     id = Column(UUID(as_uuid=True),default=uuid.uuid4,primary_key=True)
-    title = Column(String,nullable=True)
+    title = Column(String(30),nullable=True)
     description = Column(Text, nullable=False)
     image_url = Column(String(255), nullable=True)
     like_count = Column(Integer, default=0)
