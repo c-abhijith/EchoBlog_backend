@@ -4,11 +4,12 @@ from api.db import Base, engine
 from api.routes.auth import router as auth_router
 from api.routes.blog import router as blog_router
 from api.routes.comment import router as comment_router
+from api.routes.user import router as user_router
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
 from config import get_settings
+from fastapi.security import OAuth2PasswordBearer
 
 # Load settings
 settings = get_settings()
@@ -35,7 +36,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+        "defaultModelsExpandDepth": -1,
+        "displayRequestDuration": True,
+        "filter": True,
+        "operationsSorter": "method"
+    }
 )
 
 # Add CORS middleware
@@ -49,7 +57,7 @@ app.add_middleware(
 )
 
 # OAuth2 Bearer Token
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # Custom OpenAPI schema
 def custom_openapi():
@@ -57,21 +65,32 @@ def custom_openapi():
         return app.openapi_schema
 
     openapi_schema = get_openapi(
-        title=settings.APP_NAME,
+        title=f"{settings.APP_NAME} API",
         version=settings.APP_VERSION,
-        description="This is the API documentation for BlogZ4, demonstrating token-only authentication in Swagger.",
+        description="EchoBlog API documentation",
         routes=app.routes,
     )
-    openapi_schema["components"]["securitySchemes"] = {
-        "bearerAuth": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
+
+    openapi_schema["components"] = {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "Enter your JWT token"
+            }
         }
     }
-    for path in openapi_schema["paths"]:
-        for method in openapi_schema["paths"][path]:
-            openapi_schema["paths"][path][method]["security"] = [{"bearerAuth": []}]
+
+    # Add global security for all routes except auth
+    api_routes = [route for route in app.routes if getattr(route, "tags", None)]
+    for route in api_routes:
+        path = openapi_schema["paths"][route.path]
+        operations = [op for op in path if op in ["get", "post", "put", "delete", "patch"]]
+        
+        for op in operations:
+            if "authentication" not in route.tags:
+                path[op]["security"] = [{"bearerAuth": []}]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -89,6 +108,7 @@ except Exception as e:
 app.include_router(auth_router)
 app.include_router(blog_router)
 app.include_router(comment_router)
+app.include_router(user_router)
 
 # Root route
 @app.get("/")
@@ -107,5 +127,5 @@ if __name__ == '__main__':
         "main:app",
         host=settings.SERVER_HOST,
         port=settings.SERVER_PORT,
-        reload=True  # Enable auto-reload for development
+        reload=settings.SERVER_WORKERS
     )
