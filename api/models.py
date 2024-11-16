@@ -1,6 +1,6 @@
 import uuid
 import enum
-from config import Base
+from api.db import Base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -26,8 +26,8 @@ class User(BaseModel):
     id = Column(UUID(as_uuid=True),primary_key=True,default=uuid.uuid4)
     username = Column(String(30),nullable=False,unique=True)
     email = Column(String(50),nullable=False,unique=True)
-    password = Column(String(20),nullable=False)
-    bio = Column(Text,nullable=False)
+    password = Column(String(255),nullable=False)
+    bio = Column(Text,nullable=True)
     title = Column(String(30),nullable=True)
     twitter_url = Column(String,nullable=True)
     instagram_url = Column(String,nullable=True)
