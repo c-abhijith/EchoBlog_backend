@@ -3,14 +3,14 @@ from config import get_settings
 from fastapi.middleware.cors import CORSMiddleware
 from api.db import Base, engine
 from api.routes.auth import router as auth_router
-from fastapi.middleware.base import BaseHTTPMiddleware
+from api.routes.blog import router as blog_router
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 
 settings = get_settings()
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Paths that don't need authentication
         public_paths = [
             "/",
             "/docs",
@@ -23,7 +23,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in public_paths:
             return await call_next(request)
             
-        # For all other paths, check for token
         if not request.headers.get("Authorization"):
             return JSONResponse(
                 status_code=401,
@@ -38,7 +37,6 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -48,19 +46,16 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Add authentication middleware
 app.add_middleware(AuthMiddleware)
 
-# Create tables
-print("Creating database tables...")
+
 try:
     Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully")
 except Exception as e:
-    print(f"Error creating tables: {str(e)}")
     raise
 
 app.include_router(auth_router)
+app.include_router(blog_router)
 
 @app.get("/")
 def read_root():

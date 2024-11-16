@@ -8,7 +8,7 @@ from datetime import datetime
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="auth/login",
-    auto_error=False  # Don't auto-raise errors
+    auto_error=False 
 )
 
 async def verify_token(token: Optional[str] = Depends(oauth2_scheme)) -> dict:
