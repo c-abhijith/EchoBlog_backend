@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 class Settings:
@@ -14,6 +15,8 @@ class Settings:
     SERVER_WORKERS: int = int(os.getenv("WORKERS", "1"))
     
     DATABASE_URL = os.getenv("DATABASE_URL","sqlite:///./blogz4.db")
+    ALLOWED_ORIGINS= os.getenv("ALLOWED_ORIGINS","http://localhost:3000")
+    
 
 @lru_cache
 def get_settings() -> Settings:
